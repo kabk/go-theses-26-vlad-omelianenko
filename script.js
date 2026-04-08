@@ -1,7 +1,13 @@
 document.addEventListener("DOMContentLoaded", () => {
-  renderChapterOne();
-  renderTooltips();
-  initBooklet();
+  renderDoubleText("intro-body", "intro-source");
+  renderDoubleText("following-body", "following-source");
+  renderDoubleText("page-body", "page-source");
+  renderDoubleText("publishing-body", "publishing-source");
+  renderDoubleText("conclusion-body", "conclusion-source");
+  renderDoubleText("bibliography-body", "bibliography-source");
+  renderBracketTooltips();
+  initInteractiveTooltips();
+  initImageLightbox();
 });
 
 function renderDoubleText(containerId, templateId) {
@@ -34,73 +40,173 @@ function renderDoubleText(containerId, templateId) {
   container.appendChild(buildColumn("right", "right-column"));
 }
 
-renderDoubleText("intro-body", "intro-source");
-renderDoubleText("following-body", "following-source");
-renderDoubleText("page-body", "page-source");
-renderDoubleText("publishing-body", "publishing-source");
-renderDoubleText("conclusion-body", "conclusion-source");
-renderDoubleText("bibliography-body", "bibliography-source");
+function renderBracketTooltips() {
+  document
+    .querySelectorAll(".annotated-text")
+    .forEach((block) => {
+      block.innerHTML = block.innerHTML.replace(
+        /(\S+)\s*\[([^\]]+)\]/g,
+        (_, word, tip) => `
+        <span class="tooltip-wrap">
+          <button type="button" class="tooltip-trigger">${word}</button>
+          <span class="tooltip-text">${tip}</span>
+        </span>
+      `,
+      );
+    });
+}
 
-function initBooklet() {
-  const leftPage = document.querySelector(".left-page");
-  const rightPage = document.querySelector(".right-page");
-  const leftPageImg = document.querySelector(".left-page img");
-  const rightPageImg = document.querySelector(".right-page img");
+function positionTooltip(wrap) {
+  const trigger = wrap.querySelector(".tooltip-trigger");
+  const tooltip = wrap.querySelector(".tooltip-text");
+  if (!trigger || !tooltip) return;
 
-  if (!leftPage || !rightPage || !leftPageImg || !rightPageImg) return;
+  const gap = 8;
+  const margin = 12;
 
-  const totalPages = 8;
+  tooltip.style.left = "0px";
+  tooltip.style.top = "0px";
 
-  function pagePath(pageNumber) {
-    const padded = String(pageNumber).padStart(2, "0");
-    return `./Issue/IssuePage_${padded}.jpg`;
+  const triggerRect = trigger.getBoundingClientRect();
+
+  const oldVisibility = tooltip.style.visibility;
+  const oldOpacity = tooltip.style.opacity;
+
+  tooltip.style.visibility = "hidden";
+  tooltip.style.opacity = "1";
+
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const tooltipWidth = tooltipRect.width;
+  const tooltipHeight = tooltipRect.height;
+
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  let left = triggerRect.right + gap;
+  let top = triggerRect.top + (triggerRect.height - tooltipHeight) / 2;
+
+  if (left + tooltipWidth > viewportWidth - margin) {
+    left = triggerRect.left - tooltipWidth - gap;
   }
 
-  const spreads = [{ left: null, right: 1 }];
+  if (left < margin) {
+    left = margin;
+  }
 
-  for (let p = 2; p <= totalPages; p += 2) {
-    if (p === totalPages) {
-      spreads.push({ left: p, right: null });
-    } else {
-      spreads.push({ left: p, right: p + 1 });
+  if (top < margin) {
+    top = margin;
+  }
+
+  if (top + tooltipHeight > viewportHeight - margin) {
+    top = viewportHeight - tooltipHeight - margin;
+  }
+
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+
+  tooltip.style.visibility = oldVisibility;
+  tooltip.style.opacity = oldOpacity;
+}
+
+function initInteractiveTooltips() {
+  const desktopHover = window.matchMedia("(hover: hover) and (pointer: fine)");
+
+  function closeAll(except = null) {
+    document
+      .querySelectorAll(".right-column .tooltip-wrap.is-open")
+      .forEach((wrap) => {
+        if (wrap !== except) {
+          wrap.classList.remove("is-open");
+        }
+      });
+  }
+
+  document.querySelectorAll(".right-column .tooltip-wrap").forEach((wrap) => {
+    const trigger = wrap.querySelector(".tooltip-trigger");
+
+    trigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+
+      if (desktopHover.matches) return;
+
+      const isOpen = wrap.classList.contains("is-open");
+      closeAll();
+
+      if (!isOpen) {
+        wrap.classList.add("is-open");
+        positionTooltip(wrap);
+      }
+    });
+
+    if (desktopHover.matches) {
+      wrap.addEventListener("mouseenter", () => {
+        positionTooltip(wrap);
+      });
+
+      trigger.addEventListener("focus", () => {
+        positionTooltip(wrap);
+      });
     }
-  }
+  });
 
-  let currentSpread = 0;
-
-  function renderPage(container, img, pageNumber) {
-    if (pageNumber === null) {
-      img.style.visibility = "hidden";
-      container.classList.add("is-empty");
-    } else {
-      img.src = pagePath(pageNumber);
-      img.style.visibility = "visible";
-      container.classList.remove("is-empty");
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".right-column .tooltip-wrap")) {
+      closeAll();
     }
-  }
+  });
 
-  function renderSpread() {
-    const spread = spreads[currentSpread];
-    renderPage(leftPage, leftPageImg, spread.left);
-    renderPage(rightPage, rightPageImg, spread.right);
-  }
+  window.addEventListener("resize", () => {
+    document
+      .querySelectorAll(".right-column .tooltip-wrap.is-open")
+      .forEach((wrap) => {
+        positionTooltip(wrap);
+      });
+  });
 
-  function nextSpread() {
-    if (currentSpread < spreads.length - 1) {
-      currentSpread += 1;
-      renderSpread();
+  window.addEventListener(
+    "scroll",
+    () => {
+      document
+        .querySelectorAll(".right-column .tooltip-wrap.is-open")
+        .forEach((wrap) => {
+          positionTooltip(wrap);
+        });
+    },
+    true,
+  );
+}
+
+function initImageLightbox() {
+  const lightbox = document.getElementById("image-lightbox");
+  const lightboxImage = document.getElementById("lightbox-image");
+
+  if (!lightbox || !lightboxImage) return;
+
+  document.addEventListener("click", (event) => {
+    const clickedImage = event.target.closest("img");
+
+    if (clickedImage && !lightbox.contains(clickedImage)) {
+      if (clickedImage.classList.contains("hidden-image")) return;
+
+      lightboxImage.src = clickedImage.currentSrc || clickedImage.src;
+      lightboxImage.alt = clickedImage.alt || "";
+      lightbox.hidden = false;
+      document.body.style.overflow = "hidden";
+      return;
     }
-  }
 
-  function previousSpread() {
-    if (currentSpread > 0) {
-      currentSpread -= 1;
-      renderSpread();
+    if (!lightbox.hidden) {
+      lightbox.hidden = true;
+      lightboxImage.src = "";
+      document.body.style.overflow = "";
     }
-  }
+  });
 
-  rightPage.addEventListener("click", nextSpread);
-  leftPage.addEventListener("click", previousSpread);
-
-  renderSpread();
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !lightbox.hidden) {
+      lightbox.hidden = true;
+      lightboxImage.src = "";
+      document.body.style.overflow = "";
+    }
+  });
 }
